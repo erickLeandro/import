@@ -46,10 +46,10 @@
           files (-> (assoc entry :file-kws valid-kws)
                     (find-in-fs))]
       (-> entry
-        (dissoc :old-id 
-                :foto1 
-                :foto2 
-                :foto3 
+        (dissoc :old-id
+                :foto1
+                :foto2
+                :foto3
                 :foto4
                 :foto5
                 :foto6
@@ -80,7 +80,7 @@
    :foto6 foto6})
 
 (defn persist-entry [db-target entries]
-  (j/insert-multi! db-target :noticia entries))
+  (get :generate_keys (first (j/insert! db-target :noticia entries))))
 
 (->> (j/query
      db-source
@@ -90,3 +90,6 @@
          (sql/format)))
     (map new-entry)
     (with-files))
+
+
+
