@@ -9,6 +9,7 @@
 ;; Config vars
 ;; =============================================================================
 (def news-path (env :news-path))
+(def news-id 80)
 
 ;; =============================================================================
 ;; DB Setup
@@ -63,6 +64,10 @@
 ;; 3) Mover os arquivos existens para o Storage
 ;; 4) Criar o registro no banco de dados na tabela _upload
 
+
+;; =============================================================================
+;; News functions
+;; =============================================================================
 (defn new-entry [{:keys [id titulo texto data foto1 foto2 foto3 foto4 foto5 foto6]}]
   {:noticia_titulo   titulo
    :organogramaCod 5
@@ -79,14 +84,47 @@
    :foto5 foto5
    :foto6 foto6})
 
-(defn persist-entry [db-target entries]
-  (j/insert-multi! db-target :noticia entries))
+(defn persist-entry! [db entry]
+  ((comp :generated_key first)
+   (j/insert! db :noticia (dissoc entry :files))))
 
-(->> (j/query
-     db-source
-     (-> (select :*)
-         (from :mac_noticias)
-         (where [:= :id 806])
-         (sql/format)))
-    (map new-entry)
-    (with-files))
+;; =============================================================================
+;; Upload functions
+;; =============================================================================
+(defn make-upload [^java.io.File file entry-id date]
+  {:organogramaCod 5
+   :moduloCod news-id
+   :uploadCodReferencia entry-id
+   :uploadNomeCampo "noticia_upload"
+   :uploadNomeFisico (str (java.util.UUID/randomUUID) ".jpg")
+   :uploadNomeOriginal (.getName file)
+   :uploadDataCadastro date
+   :uploadMime "image/jpeg"
+   :uploadDownloads 0})
+
+(defn persist-upload! [conn upload-entry]
+  (j/insert! conn :_upload upload-entry))
+
+(defn import-entry! [entry]
+  (j/with-db-transaction [conn db-target]
+    (let [entry-id (persist-entry! conn entry)
+          date     (java.util.Date.)
+          uploads  (map #(make-upload % entry-id date)
+                        (:files entry))]
+      (println (doall (map (partial persist-upload! conn) uploads)))
+      (throw (Exception. "Just testing")))))
+
+(let [entries (->> (j/query
+                    db-source
+                    (-> (select :*)
+                        (from :mac_noticias)
+                        (where [:= :id 806])
+                        (sql/format)))
+                   (map new-entry)
+                   (with-files))
+      entry (first entries)]
+  (import-entry! entry))
+
+;; (io/make-parents "/Users/eduardo/test/mkdir/recursive.txt")
+
+;; (io/copy (io/file "/Users/eduardo/noticias/1/806.jpg") (io/file "/Users/eduardo/test/outra-coisa/foto.jpg"))
