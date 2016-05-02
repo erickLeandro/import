@@ -60,3 +60,11 @@
 ;; 2) Salvar as noticias, retornando o id do banco novo
 ;; 3) Mover os arquivos existens para o Storage
 ;; 4) Criar o registro no banco de dados na tabela _upload
+
+(defn new-entry [:keys titulo texto data]
+{:noticia_titulo titulo
+ :noticia_conteudo texto
+ :noticia_data data})
+
+(defn persist-entry [db-target entry]
+  j/insert-multi! db-target :noticia entry)
