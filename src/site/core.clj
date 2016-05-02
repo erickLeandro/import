@@ -13,9 +13,9 @@
 ;; =============================================================================
 ;; DB Setup
 ;; =============================================================================
-(def db-source (env :source-db))
+(def db-source (read-string (env :source-db)))
 
-(def db-target (env :target-db))
+(def db-target (read-string (env :target-db)))
 
 ;; =============================================================================
 ;; File functions
