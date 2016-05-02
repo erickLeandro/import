@@ -47,10 +47,10 @@
           files (-> (assoc entry :file-kws valid-kws)
                     (find-in-fs))]
       (-> entry
-        (dissoc :old-id 
-                :foto1 
-                :foto2 
-                :foto3 
+        (dissoc :old-id
+                :foto1
+                :foto2
+                :foto3
                 :foto4
                 :foto5
                 :foto6
