@@ -10,6 +10,7 @@
 ;; =============================================================================
 (def news-path (env :news-path))
 (def news-id 80)
+(def storage-path "/var/www/html/Potencia/App/Storage/5")
 
 ;; =============================================================================
 ;; DB Setup
@@ -100,25 +101,43 @@
    :uploadNomeOriginal (.getName file)
    :uploadDataCadastro date
    :uploadMime "image/jpeg"
-   :uploadDownloads 0})
+   :uploadDownloads 0
+   :file file})
 
 (defn persist-upload! [conn upload-entry]
-  (j/insert! conn :_upload upload-entry))
+  (j/insert! conn :_upload (dissoc upload-entry :file)))
+
+(defn build-path [date]
+  (str storage-path "/" (.format (java.text.SimpleDateFormat. "Y/MM/dd") date)))
+
+(defn copy-files! [uploads path]
+  (map (fn [upload]
+         (let [file (:file upload)
+               dest (io/file (str (.getPath path) "/" (:uploadNomeFisico upload)))]
+           (io/copy file dest)))
+       uploads))
 
 (defn import-entry! [entry]
   (j/with-db-transaction [conn db-target]
     (let [entry-id (persist-entry! conn entry)
           date     (java.util.Date.)
           uploads  (map #(make-upload % entry-id date)
-                        (:files entry))]
-      (println (doall (map (partial persist-upload! conn) uploads)))
-      (throw (Exception. "Just testing")))))
+                        (:files entry))
+          path (io/file (build-path date))
+          realpath (.getPath path)
+          _ (doall (map (partial persist-upload! conn) uploads))]
+      (if (.exists path)
+        (copy-files! uploads path)
+        (do
+          (io/make-parents realpath)
+          (copy-files! uploads path)))
+    )))
 
 (let [entries (->> (j/query
                     db-source
                     (-> (select :*)
                         (from :mac_noticias)
-                        (where [:= :id 806])
+                        (where :id 806)
                         (sql/format)))
                    (map new-entry)
                    (with-files))
