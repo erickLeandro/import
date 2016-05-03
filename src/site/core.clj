@@ -124,7 +124,7 @@
           uploads  (map #(make-upload % entry-id date)
                         (:files entry))
           path (io/file (build-path date))
-          realpath (.getPath path)
+          realpath (str (.getPath path) "/qualquercoisa.txt")
           _ (doall (map (partial persist-upload! conn) uploads))]
       (if (.exists path)
         (copy-files! uploads path)
@@ -137,12 +137,10 @@
                     db-source
                     (-> (select :*)
                         (from :mac_noticias)
-                        (where :id 806)
                         (sql/format)))
                    (map new-entry)
-                   (with-files))
-      entry (first entries)]
-  (import-entry! entry))
+                   (with-files))]
+  (map #(import-entry! %) entries))
 
 ;; (io/make-parents "/Users/eduardo/test/mkdir/recursive.txt")
 
