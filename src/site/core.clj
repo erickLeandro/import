@@ -9,8 +9,8 @@
 ;; Config vars
 ;; =============================================================================
 (def news-path (env :news-path))
-(def news-id 80)
-(def storage-path "/var/www/html/Potencia/App/Storage/5")
+(def news-id (env :news-id))
+(def storage-path (env :storage-path))
 
 ;; =============================================================================
 ;; DB Setup
@@ -45,26 +45,19 @@
   (map
    (fn [entry]
      (let [valid-kws (valid-files entry)
-          files (-> (assoc entry :file-kws valid-kws)
-                    (find-in-fs))]
-      (-> entry
-        (dissoc :old-id
-                :foto1
-                :foto2
-                :foto3
-                :foto4
-                :foto5
-                :foto6
-                :file-kws)
-        (assoc :files files))))
+           files (-> (assoc entry :file-kws valid-kws)
+                     (find-in-fs))]
+       (-> entry
+           (dissoc :old-id
+                   :foto1
+                   :foto2
+                   :foto3
+                   :foto4
+                   :foto5
+                   :foto6
+                   :file-kws)
+           (assoc :files files))))
    entries))
-
-;; TODO
-;; 1) Gerar um map de Noticias Antigas -> Noticias Novas
-;; 2) Salvar as noticias, retornando o id do banco novo
-;; 3) Mover os arquivos existens para o Storage
-;; 4) Criar o registro no banco de dados na tabela _upload
-
 
 ;; =============================================================================
 ;; News functions
@@ -84,6 +77,15 @@
    :foto4 foto4
    :foto5 foto5
    :foto6 foto6})
+
+(defn get-entries []
+  (->> (j/query
+        db-source
+        (-> (select :*)
+            (from :mac_noticias)
+            (sql/format)))
+       (map new-entry)
+       (with-files)))
 
 (defn persist-entry! [db entry]
   ((comp :generated_key first)
@@ -123,25 +125,26 @@
           date     (java.util.Date.)
           uploads  (map #(make-upload % entry-id date)
                         (:files entry))
-          path (io/file (build-path date))
+          path     (io/file (build-path date))
           realpath (str (.getPath path) "/qualquercoisa.txt")
-          _ (doall (map (partial persist-upload! conn) uploads))]
+          _        (doall (map (partial persist-upload! conn) uploads))]
       (if (.exists path)
         (copy-files! uploads path)
         (do
           (io/make-parents realpath)
-          (copy-files! uploads path)))
-    )))
+          (copy-files! uploads path))))))
 
-(let [entries (->> (j/query
-                    db-source
-                    (-> (select :*)
-                        (from :mac_noticias)
-                        (sql/format)))
-                   (map new-entry)
-                   (with-files))]
-  (map #(import-entry! %) entries))
+(defn import! []
+  (let [entries       (get-entries)
+        entries-count (count entries)]
+    (println "Starting import...")
+    (doall
+     (map (fn [entry n]
+            (import-entry! entry)
+            (println "Imported entry " n " of " entries-count))
+          entries
+          (range 1 (inc entries-count))))
+    (println "Done!")))
 
-;; (io/make-parents "/Users/eduardo/test/mkdir/recursive.txt")
-
-;; (io/copy (io/file "/Users/eduardo/noticias/1/806.jpg") (io/file "/Users/eduardo/test/outra-coisa/foto.jpg"))
+(defn -main [& args]
+  (import!))
