@@ -15,31 +15,22 @@
 ;; =============================================================================
 
 (def db-target {:subprotocol "mysql"
-             :subname "//localhost:3306/potencia?zeroDateTimeBehavior=convertToNull"
-             :user "root"
-             :password "q1w2e3"})
+                :subname "//localhost:3306/potencia?zeroDateTimeBehavior=convertToNull"
+                :user "root"
+                :password "q1w2e3"})
 
 (defn get-invalid-entries []
-  (->> (j/query db-target
-          (-> (select :usuarioCod :usuarioLogin :numeroAcessos)
-              (from :_usuario)
-              (where [:in :usuarioLogin (->
-                                          (select :usuarioLogin)
-                                          (from :_usuario)
-                                          (where [:= :organogramaCod organograma])
-                                          (group :usuarioLogin)
-                                          (having [:> :%count.* 1])
-                                        )] :organogramaCod organograma)
-              (sql/format)))))
-
-(defn get-entries []
-  (->> (j/query db-target
-        (-> (select :u.usuarioCod)
-            (from [:_usuario :u])
-            (join :pessoa [:= :pessoa.usuarioCod :u.usuarioCod])
-            (where [:= :u.organogramaCod organograma])
-            (sql/format)))))
-
+  (j/query
+   db-target
+   (-> (select :usuarioCod :usuarioLogin :numeroAcessos)
+       (from :_usuario)
+       (where [:in :usuarioLogin (-> (select :usuarioLogin)
+                                     (from :_usuario)
+                                     (where [:= :organogramaCod organograma])
+                                     (group :usuarioLogin)
+                                     (having [:> :%count.* 1]))]
+              [:= :organogramaCod organograma])
+       (sql/format))))
 
 (defn separate-by-login [rs]
   (reduce (fn [separated user]
@@ -56,48 +47,27 @@
                                     :else 0))
                                 users)]
               (if (seq (rest ordered))
-                (conj to-exclude (rest ordered))
+                (conj to-exclude (first (rest ordered)))
                 to-exclude)))
           []
           separated))
 
-(defn valids-ids [] (into [] (map (fn [x] (get x :usuariocod)) (get-entries))))
-
-(defn invalids-ids [] (into [] (map (fn [x] (get x :usuariocod)) (get-invalid-entries))))
-
-(defn in?
-  "true if coll contains elm"
-  [coll elm]
-  (some #(= elm %) coll))
-
-(defn remove-user [id]
-  (println "Removing user: " id)
-  (j/with-db-transaction [conn db-target]
-    (j/delete! db-target :_log ["usuarioCod = ?" id])
-    (j/delete! db-target :_usuario_recovery ["usuarioCod = ?" id])
-    (j/delete! db-target :_usuario ["usuarioCod = ?" id])))
-
-(defn check-relation-person [id]
-  (println "Check relation person" id)
-  (empty?
-    (->> (j/query db-target
-          (-> (select :usuarioCod)
-              (from :pessoa)
-              (where [:= :usuarioCod id])
-              (sql/format))))))
+(defn remove-user [user]
+  (println "Removing user: " user)
+  (let [id (:usuariocod user)]
+    (j/with-db-transaction [conn db-target]
+      (j/delete! db-target :_log ["usuarioCod = ?" id])
+      (j/delete! db-target :_usuario_recovery ["usuarioCod = ?" id])
+      (j/delete! db-target :_usuario ["usuarioCod = ?" id]))))
 
 (defn check-invalids []
   (println "Start check duplicates")
-  (doall
-    (map (fn [x]
-      (if (not (check-relation-person x))
-        (remove-user x))
-      (valids-ids)))))
+  (let [dups (-> (get-invalid-entries)
+                 (separate-by-login)
+                 (duplicates))]
+    (doall
+     (map remove-user dups))))
 
 (defn -main [& args]
   (check-invalids)
   (println "Done!"))
-
-(-> (get-invalid-entries)
-    (separate-by-login)
-    (duplicates))
